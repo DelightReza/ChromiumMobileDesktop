@@ -1,0 +1,74 @@
+name: Fetch Latest Chromium APK
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Runs automatically every day at midnight UTC
+  workflow_dispatch: # Allows you to click "Run workflow" manually on GitHub
+
+jobs:
+  check-download-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to update your releases without committing code
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Install Dependencies
+      run: pip install requests
+
+    - name: Run Fetcher Script
+      run: python get_links.py
+
+    - name: Check Against Existing Release Version
+      id: check_version
+      run: |
+        # Check if the build version we just found is already live in your 'latest' release description
+        RELEASE_BODY=$(curl -s https://github.com{{ github.repository }}/releases/tags/latest | jq -r '.body' || echo "")
+        
+        if [[ "$RELEASE_BODY" == *"${{ env.BUILD_VERSION }}"* ]]; then
+          echo "SKIP_RUN=true" >> $GITHUB_ENV
+          echo "⏩ Build ${{ env.BUILD_VERSION }} is already live. Skipping download."
+        else
+          echo "SKIP_RUN=false" >> $GITHUB_ENV
+          echo "🆕 New build ${{ env.BUILD_VERSION }} detected!"
+        fi
+
+    - name: Download Archive
+      if: env.SKIP_RUN == 'false'
+      run: curl -L -o chromium-desktop.zip "${{ env.DOWNLOAD_URL }}"
+
+    - name: Unzip and Extract APK
+      if: env.SKIP_RUN == 'false'
+      run: |
+        # Extracts just the specific browser app file out of the zip
+        unzip -j chromium-desktop.zip "chrome-android-desktop/apks/ChromePublic.apk" -d .
+        mv ChromePublic.apk ChromiumMobileDesktop-Latest.apk
+
+    - name: Update Permanent GitHub Release
+      if: env.SKIP_RUN == 'false'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: latest
+        name: Chromium Desktop Android
+        body: |
+          ### 📱 Chrome Extension-Ready Mobile Build
+          
+          * **Current Build Revision:** ${{ env.BUILD_VERSION }}
+          * **Direct Source Archive:** ${{ env.DOWNLOAD_URL }}
+          * **Web Directory:** ${{ env.WEB_URL }}
+          
+          ℹ️ _Download the **ChromiumMobileDesktop-Latest.apk** asset attached below to sideload it directly onto your Android device._
+        files: |
+          ChromiumMobileDesktop-Latest.apk
+        draft: false
+        prerelease: false
+        overwrite: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
