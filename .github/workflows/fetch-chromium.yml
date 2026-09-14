@@ -3,13 +3,13 @@ name: Fetch Latest Chromium APK
 on:
   schedule:
     - cron: '0 0 * * *' # Runs automatically every day at midnight UTC
-  workflow_dispatch: # Allows manual trigger via the GitHub Actions tab
+  workflow_dispatch: # Allows you to click "Run workflow" manually on GitHub
 
 jobs:
   check-download-release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Required to update the release and upload assets
+      contents: write # Needed to update your releases without committing code
 
     steps:
     - name: Checkout Code
@@ -21,27 +21,17 @@ jobs:
         python-version: '3.x'
 
     - name: Install Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install requests
+      run: pip install requests
 
     - name: Run Fetcher Script
       run: python get_links.py
 
-    - name: Parse Script Results
-      id: parse_vars
-      run: |
-        while IFS= read -r line; do
-          echo "$line" >> $GITHUB_ENV
-        done < latest_chromium_links.txt
-
     - name: Check Against Existing Release Version
       id: check_version
       run: |
-        # Fetch the current release body text from GitHub API to find what build is currently live
+        # Check if the build version we just found is already live in your 'latest' release description
         RELEASE_BODY=$(curl -s https://github.com{{ github.repository }}/releases/tags/latest | jq -r '.body' || echo "")
         
-        # If the current build number is already mentioned in the release body, skip the run
         if [[ "$RELEASE_BODY" == *"${{ env.BUILD_VERSION }}"* ]]; then
           echo "SKIP_RUN=true" >> $GITHUB_ENV
           echo "⏩ Build ${{ env.BUILD_VERSION }} is already live. Skipping download."
@@ -52,17 +42,14 @@ jobs:
 
     - name: Download Archive
       if: env.SKIP_RUN == 'false'
-      run: |
-        echo "📥 Downloading ${{ env.DOWNLOAD_URL }}..."
-        curl -L -o chromium-desktop.zip "${{ env.DOWNLOAD_URL }}"
+      run: curl -L -o chromium-desktop.zip "${{ env.DOWNLOAD_URL }}"
 
     - name: Unzip and Extract APK
       if: env.SKIP_RUN == 'false'
       run: |
-        echo "📂 Extracting ChromePublic.apk..."
+        # Extracts just the specific browser app file out of the zip
         unzip -j chromium-desktop.zip "chrome-android-desktop/apks/ChromePublic.apk" -d .
         mv ChromePublic.apk ChromiumMobileDesktop-Latest.apk
-        echo "✅ APK extracted successfully!"
 
     - name: Update Permanent GitHub Release
       if: env.SKIP_RUN == 'false'
@@ -73,7 +60,7 @@ jobs:
         body: |
           ### 📱 Chrome Extension-Ready Mobile Build (Updated Daily)
           
-          This release is automatically updated with the newest working build. No commits are pushed to the repository code history.
+          This release updates automatically. No commits are pushed to the codebase history.
           
           * **Current Build Revision:** ${{ env.BUILD_VERSION }}
           * **Direct Source Archive:** ${{ env.DOWNLOAD_URL }}
@@ -84,6 +71,6 @@ jobs:
           ChromiumMobileDesktop-Latest.apk
         draft: false
         prerelease: false
-        overwrite: true # Replaces the old APK asset with the new one seamlessly
+        overwrite: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
