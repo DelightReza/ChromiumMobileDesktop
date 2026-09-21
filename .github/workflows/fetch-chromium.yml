@@ -88,7 +88,7 @@ jobs:
           tag_name: latest
           name: Chromium Desktop Android
           body: |
-            ### 📱 Chrome Extension-Ready Mobile Build
+            ### 📱 Chromium Desktop Android
 
             * **Current Build Revision:** ${{ env.BUILD_VERSION }}
             * **Direct Source Archive:** ${{ env.DOWNLOAD_URL }}
